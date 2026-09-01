@@ -1,0 +1,10 @@
+project_id = "stratos"
+
+[functions.create-github-issue]
+verify_jwt = false
+
+[functions.complete-task]
+verify_jwt = false
+
+[functions.run-automation]
+verify_jwt = false

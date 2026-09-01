@@ -1,0 +1,77 @@
+name: Scheduled Automations
+
+on:
+  schedule:
+    # daily_tasks + overdue_reminder at 08:00 Asia/Karachi (03:00 UTC)
+    - cron: "0 3 * * *"
+    # overdue_reminder at 17:00 Asia/Karachi (12:00 UTC)
+    - cron: "0 12 * * *"
+    # weekly_employee_summary at 09:00 Asia/Karachi every Sunday (04:00 UTC)
+    - cron: "0 4 * * 0"
+    # weekly_admin_report at 18:00 Asia/Karachi every Friday (13:00 UTC)
+    - cron: "0 13 * * 5"
+
+  workflow_dispatch:
+    inputs:
+      types:
+        description: >-
+          Automation types to run, separated by spaces.
+          Available: daily_tasks overdue_reminder weekly_employee_summary weekly_admin_report
+        required: false
+        default: "daily_tasks"
+      force:
+        description: "Force run (ignores enabled flag in DB)"
+        required: false
+        default: "true"
+        type: boolean
+
+permissions: {}
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+jobs:
+  run-automations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Determine automation types to run
+        id: types
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "types=${{ github.event.inputs.types }}" >> "$GITHUB_OUTPUT"
+          else
+            CRON="${{ github.event.schedule }}"
+            case "$CRON" in
+              "0 3 * * *")
+                echo "types=daily_tasks overdue_reminder" >> "$GITHUB_OUTPUT"
+                ;;
+              "0 12 * * *")
+                echo "types=overdue_reminder" >> "$GITHUB_OUTPUT"
+                ;;
+              "0 4 * * 0")
+                echo "types=weekly_employee_summary" >> "$GITHUB_OUTPUT"
+                ;;
+              "0 13 * * 5")
+                echo "types=weekly_admin_report" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "types=daily_tasks" >> "$GITHUB_OUTPUT"
+                ;;
+            esac
+          fi
+
+      - name: Run automations
+        run: python scripts/run_automation.py ${{ steps.types.outputs.types }}
