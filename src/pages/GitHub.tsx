@@ -37,6 +37,7 @@ export default function GitHubPage() {
     const { data, error: err } = await supabase
       .from("settings")
       .select("id")
+      .order("id", { ascending: true })
       .limit(1);
     let result;
     if (!err && data && data.length > 0) {
@@ -48,6 +49,18 @@ export default function GitHubPage() {
       result = await supabase
         .from("settings")
         .insert({ github_repo: repo.trim() || null });
+      if (result.error && result.error.code === "23505") {
+        const { data: existing } = await supabase
+          .from("settings")
+          .select("id")
+          .limit(1);
+        if (existing && existing.length > 0) {
+          result = await supabase
+            .from("settings")
+            .update({ github_repo: repo.trim() || null, updated_at: new Date().toISOString() })
+            .eq("id", existing[0].id);
+        }
+      }
     }
     setSaving(false);
     if (result.error) {

@@ -115,16 +115,30 @@ Deno.serve(async (req) => {
   await supabase
     .from("automation_runs")
     .update({
-      status: result.error ? "failed" : "success",
+      status: result.error || result.emailsFailed > 0 ? "failed" : "success",
       completed_at: nowIso().toISOString(),
       emails_sent: result.emailsSent,
       emails_failed: result.emailsFailed,
-      error: result.error ?? null,
+      error:
+        result.error ??
+        (result.emailsFailed > 0
+          ? `${result.emailsFailed} email(s) failed to send. Check email_logs for details.`
+          : null),
     })
     .eq("id", run.id);
 
-  if (result.error) {
-    return corsJson({ ok: false, message: result.error, emails_sent: result.emailsSent, emails_failed: result.emailsFailed }, 500);
+  if (result.error || result.emailsFailed > 0) {
+    return corsJson(
+      {
+        ok: false,
+        message:
+          result.error ??
+          `${result.emailsFailed} email(s) failed to send.`,
+        emails_sent: result.emailsSent,
+        emails_failed: result.emailsFailed,
+      },
+      500
+    );
   }
   return corsJson({
     ok: true,

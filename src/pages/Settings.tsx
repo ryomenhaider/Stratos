@@ -73,12 +73,25 @@ export default function SettingsPage() {
       weekly_report_recipient: form.weekly_report_recipient.trim() || null,
       updated_at: new Date().toISOString(),
     };
-    const { data, error: err } = await supabase.from("settings").select("id").limit(1);
+    const { data, error: err } = await supabase
+      .from("settings")
+      .select("id")
+      .order("id", { ascending: true })
+      .limit(1);
     let result;
     if (!err && data && data.length > 0) {
       result = await supabase.from("settings").update(patch).eq("id", data[0].id);
     } else {
       result = await supabase.from("settings").insert(patch);
+      if (result.error && result.error.code === "23505") {
+        const { data: existing } = await supabase
+          .from("settings")
+          .select("id")
+          .limit(1);
+        if (existing && existing.length > 0) {
+          result = await supabase.from("settings").update(patch).eq("id", existing[0].id);
+        }
+      }
     }
     setSaving(false);
     if (result.error) {
