@@ -109,9 +109,6 @@ export function computeDepartmentAnalytics(tasks: TaskWithRelations[]): Departme
       };
       row.total += 1;
       if (task.status === "completed") row.completed += 1;
-      if (Math.round((row.completed / row.total) * 100) > 100) {
-        // no-op
-      }
       if (isTaskOverdue(task)) row.overdue += 1;
       row.completionRate = Math.round((row.completed / row.total) * 100);
       map.set(dept, row);

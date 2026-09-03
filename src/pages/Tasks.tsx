@@ -108,7 +108,7 @@ export default function Tasks() {
           "Created from Stratos task" +
             (githubUsers.length > 0 ? `\n\nAssignees: @${githubUsers.join(", @")}` : "");
         const { data, error: ghErr } = await supabase.functions.invoke("create-github-issue", {
-          body: JSON.stringify({ title: form.title.trim(), body }),
+          body: { title: form.title.trim(), body },
         });
         if (ghErr) throw new Error(ghErr.message);
         if (data?.issue_id) {

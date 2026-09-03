@@ -177,11 +177,11 @@ export default function EmployeeDetails() {
                           {task.title}
                         </Link>
                       </td>
-                      <td className="px-5 py-3 text-gray-600">{formatDate(task.due_date)}</td>
+                      <td className="px-5 py-3 capitalize text-gray-600">{task.priority}</td>
                       <td className="px-5 py-3">
                         <StatusBadge status={task.status} />
                       </td>
-                      <td className="px-5 py-3 capitalize text-gray-600">{task.priority}</td>
+                      <td className="px-5 py-3 text-gray-600">{formatDate(task.due_date)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -106,7 +106,7 @@ export async function sendEmail(
 
 export function completionHref(token: string): string {
   const base = APP_URL.replace(/\/$/, "");
-  return `${base}/#/c/${token}`;
+  return `${base}/c/${token}`;
 }
 
 export function formatDate(iso: string): string {

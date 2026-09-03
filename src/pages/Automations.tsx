@@ -63,7 +63,7 @@ export default function Automations() {
     setFeedback(null);
     setError(null);
     const { data, error: err } = await supabase.functions.invoke("run-automation", {
-      body: JSON.stringify({ type }),
+      body: { type },
     });
     setRunning(null);
     if (err) {

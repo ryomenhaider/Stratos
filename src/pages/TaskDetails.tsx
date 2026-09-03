@@ -310,7 +310,7 @@ export default function TaskDetails() {
                     if (!emp) return;
                     const { data, error: err } = await supabase.functions.invoke(
                       "create-github-issue",
-                      { body: JSON.stringify({ title: task.title, body: task.description ?? "" }) }
+                      { body: { title: task.title, body: task.description ?? "" } }
                     );
                     if (!err && data?.issue_id) {
                       await supabase

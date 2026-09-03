@@ -16,7 +16,7 @@ Admin Dashboard → Supabase (employees, tasks, history, automations, email logs
 
 | Component | Service |
 |---|---|
-| Frontend | GitHub Pages (React SPA, no backend server) |
+| Frontend | Vercel (React SPA, no backend server) |
 | Database + Auth | Supabase PostgreSQL (admin-only) |
 | Scheduled automation | GitHub Actions |
 | Email delivery | Resend |
@@ -58,8 +58,7 @@ GitHub             Resend
 ```
 .
 ├── .github/workflows/
-│   ├── automations.yml      # Scheduled + manual (workflow_dispatch) automation
-│   └── deploy.yml           # Build & deploy frontend to GitHub Pages
+│   └── automations.yml      # Scheduled + manual (workflow_dispatch) automation
 ├── scripts/
 │   ├── requirements.txt
 │   └── run_automation.py    # Thin trigger that calls the run-automation edge function
@@ -78,6 +77,7 @@ GitHub             Resend
 │   ├── components/          # layout, UI primitives
 │   └── pages/               # dashboard, tasks, employees, analytics, ...
 ├── tests/                   # Vitest unit tests
+├── vercel.json              # Vercel SPA rewrite config
 ├── index.html
 ├── vite.config.ts
 └── package.json
@@ -106,7 +106,7 @@ GitHub             Resend
    npx supabase secrets set SUPABASE_URL=... \
      SUPABASE_SERVICE_ROLE_KEY=... \
      RESEND_API_KEY=... \
-     APP_URL=https://<you>.github.io/<repo>/ \
+     APP_URL=https://<your-app>.vercel.app \
      FROM_EMAIL=tasks@yourdomain.com \
      GITHUB_TOKEN=...          # optional, only for GitHub issues
    ```
@@ -134,16 +134,21 @@ SUPABASE_SERVICE_ROLE_KEY
 
 (RESEND_API_KEY and FROM_EMAIL are used by the edge functions; they can also be passed as GitHub secrets that the Python script forwards — the included workflow relies on the edge functions and only needs the two Supabase secrets.)
 
-### 4. Deploy to GitHub Pages
+### 4. Deploy to Vercel
 
-The `.github/workflows/deploy.yml` builds and publishes `dist` to GitHub Pages on every push to `main`. Add these **Actions secrets** for the build:
+1. Push the repo to GitHub.
+2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import the repo.
+3. Vercel auto-detects Vite. Use these settings:
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+4. Add these **Environment Variables** in the Vercel dashboard:
+   ```
+   VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
+5. Deploy. Vercel provides a `*.vercel.app` URL.
 
-```
-VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
-```
-
-Enable **Settings → Pages → Build and deployment → GitHub Actions** if needed. The app uses hash-based routing so it works without a server.
+The `vercel.json` configures SPA rewrites so all routes serve `index.html`.
 
 ---
 
@@ -181,7 +186,7 @@ An employee with overdue tasks receives a reminder at the configured time. Same 
 
 ### Marking a task complete from email
 
-Each task card includes a **MARK COMPLETE** button linking to `https://<app>/#/c/<token>`.
+Each task card includes a **MARK COMPLETE** button linking to `https://<app>/c/<token>`.
 
 - A random, cryptographically strong token is generated per `(task, employee)`.
 - Only its **SHA-256 hash** is stored in `email_action_tokens`.

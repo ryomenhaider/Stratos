@@ -15,7 +15,7 @@ export default function CompleteTask() {
     async function complete() {
       try {
         const { data, error } = await supabase.functions.invoke("complete-task", {
-          body: JSON.stringify({ token }),
+          body: { token },
         });
         if (cancelled) return;
         if (error) {

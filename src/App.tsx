@@ -1,4 +1,4 @@
-import { HashRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { GuestRoute, ProtectedRoute } from "@/components/RouteGuards";
 import { Layout } from "@/components/Layout";
@@ -17,7 +17,7 @@ import CompleteTask from "@/pages/CompleteTask";
 export default function App() {
   return (
     <AuthProvider>
-      <HashRouter>
+      <BrowserRouter>
         <Routes>
           <Route path="/c/:token" element={<CompleteTask />} />
           <Route element={<GuestRoute />}>
@@ -38,7 +38,7 @@ export default function App() {
             </Route>
           </Route>
         </Routes>
-      </HashRouter>
+      </BrowserRouter>
     </AuthProvider>
   );
 }
