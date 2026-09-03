@@ -116,11 +116,13 @@ export default function Tasks() {
           githubIssueUrl = data.issue_url;
         }
       } catch (err) {
-        setError(
-          `GitHub issue creation failed: ${err instanceof Error ? err.message : "unknown error"}. Task not created.`
+        // GitHub integration is optional. If issue creation fails (e.g. the
+        // GITHUB_TOKEN secret isn't configured), create the task anyway.
+        setFeedback(
+          `Task will be created, but the GitHub issue could not be created: ${
+            err instanceof Error ? err.message : "unknown error"
+          }`
         );
-        setSaving(false);
-        return;
       }
     }
 
