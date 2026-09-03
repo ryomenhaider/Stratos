@@ -7,6 +7,7 @@ import type {
   EmailLog,
   Employee,
   TaskHistory,
+  TaskProof,
   TaskWithRelations,
 } from "@/types";
 
@@ -94,6 +95,7 @@ export function useTasks() {
       .select(
         `*,
         assignees:task_assignees(employee_id, assigned_at, employee:employees(id, name, email, department, role, github_username, active)),
+        proofs:task_proofs(*, employee:employees(id, name, email)),
         completed_by_employee:employees!completed_by(id, name, email, department, role, github_username, active),
         created_by_employee:employees!created_by(id, name, email, department, role, github_username, active)
         `
@@ -104,7 +106,12 @@ export function useTasks() {
       setState({ data: null, loading: false, error: error.message, reload: fetchData });
       return;
     }
-    setState({ data: tasks as unknown as TaskWithRelations[], loading: false, error: null, reload: fetchData });
+    const raw = tasks as unknown as (TaskWithRelations & { proofs?: TaskProof[] })[];
+    const mapped = raw.map((t) => ({
+      ...t,
+      proof: (t.proofs ?? []).slice().sort((a, b) => b.submitted_at.localeCompare(a.submitted_at))[0] ?? null,
+    })) as TaskWithRelations[];
+    setState({ data: mapped, loading: false, error: null, reload: fetchData });
   }
 
   useEffect(() => {
@@ -130,6 +137,7 @@ export function useTask(id: string | undefined) {
       .select(
         `*,
         assignees:task_assignees(employee_id, assigned_at, employee:employees(id, name, email, department, role, github_username, active)),
+        proofs:task_proofs(*, employee:employees(id, name, email)),
         completed_by_employee:employees!completed_by(id, name, email, department, role, github_username, active),
         created_by_employee:employees!created_by(id, name, email, department, role, github_username, active)
         `
@@ -141,7 +149,12 @@ export function useTask(id: string | undefined) {
       setState({ data: null, loading: false, error: error.message, reload: fetchData });
       return;
     }
-    setState({ data: data as unknown as TaskWithRelations, loading: false, error: null, reload: fetchData });
+    const d = data as TaskWithRelations & { proofs?: TaskProof[] };
+    const mapped: TaskWithRelations = {
+      ...(data as TaskWithRelations),
+      proof: (d.proofs ?? []).slice().sort((a, b) => b.submitted_at.localeCompare(a.submitted_at))[0] ?? null,
+    };
+    setState({ data: mapped, loading: false, error: null, reload: fetchData });
   }
 
   useEffect(() => {

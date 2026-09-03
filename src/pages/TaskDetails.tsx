@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ExternalLink, GitBranch } from "lucide-react";
+import { ArrowLeft, ExternalLink, GitBranch, ClipboardCheck } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Spinner, Empty } from "@/components/ui/State";
+import { Modal } from "@/components/ui/Modal";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
 import { useEmployees, useTask, useTaskHistory } from "@/hooks/useData";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { TASK_STATUSES } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/utils";
@@ -26,6 +28,10 @@ export default function TaskDetails() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const { user } = useAuth();
 
   if (taskState.loading) return <Spinner label="Loading task..." />;
 
@@ -110,6 +116,35 @@ export default function TaskDetails() {
   }
 
   const history = historyState.data ?? [];
+
+  async function reviewTask(decision: "approved" | "rejected") {
+    setReviewing(true);
+    setError(null);
+    setFeedback(null);
+    const { error: invokeErr, data } = await supabase.functions.invoke("review-task", {
+      body: {
+        taskId: task.id,
+        decision,
+        rejectionReason: decision === "rejected" ? rejectReason.trim() || null : null,
+        adminEmail: user?.email ?? undefined,
+      },
+    });
+    setReviewing(false);
+    if (invokeErr) {
+      setError(invokeErr.message);
+      return;
+    }
+    if (data?.ok) {
+      setFeedback(data.message ?? (decision === "approved" ? "Task approved." : "Task rejected."));
+      setRejectOpen(false);
+      setRejectReason("");
+      setStatus(null);
+      taskState.reload();
+      historyState.reload();
+    } else {
+      setError(data?.message ?? "Could not review task.");
+    }
+  }
 
   return (
     <div>
@@ -281,6 +316,70 @@ export default function TaskDetails() {
             </CardBody>
           </Card>
 
+          {task.status === "pending_approval" && task.proof && (
+            <Card>
+              <CardHeader
+                title="Awaiting Approval"
+                action={<Badge className="bg-amber-100 text-amber-700">Pending</Badge>}
+              />
+              <CardBody className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-500">Submitted by</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {task.proof.employee?.name ?? "Unknown"}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {task.proof.submitted_at ? formatDateTime(task.proof.submitted_at) : ""}
+                    </p>
+                  </div>
+                  <ClipboardCheck className="h-5 w-5 text-amber-500" />
+                </div>
+
+                {task.proof.pr_url && (
+                  <div>
+                    <p className="mb-1 text-xs text-gray-500">Proof (PR link)</p>
+                    <a
+                      href={task.proof.pr_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 break-all text-sm text-primary-600 hover:underline"
+                    >
+                      {task.proof.pr_url}
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                  </div>
+                )}
+
+                {task.proof.note && (
+                  <div>
+                    <p className="mb-1 text-xs text-gray-500">Note</p>
+                    <p className="whitespace-pre-wrap rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                      {task.proof.note}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 border-t border-gray-100 pt-4">
+                  <Button
+                    variant="primary"
+                    disabled={reviewing}
+                    onClick={() => reviewTask("approved")}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={reviewing}
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </CardBody>
+            </Card>
+          )}
+
           <Card>
             <CardHeader title="GitHub Issue" />
             <CardBody>
@@ -341,6 +440,41 @@ export default function TaskDetails() {
           </Card>
         </div>
       </div>
+
+      <Modal
+        open={rejectOpen}
+        onClose={() => setRejectOpen(false)}
+        title="Reject submission"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRejectOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={reviewing || !rejectReason.trim()}
+              onClick={() => reviewTask("rejected")}
+            >
+              {reviewing ? "Rejecting..." : "Reject & Email Employee"}
+            </Button>
+          </>
+        }
+      >
+        <label className="block text-sm font-medium text-gray-700">
+          Reason for rejection
+          <textarea
+            required
+            rows={4}
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Explain what needs to be fixed..."
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+        <p className="mt-2 text-xs text-gray-500">
+          The employee will receive an email with this reason and a link to resubmit.
+        </p>
+      </Modal>
     </div>
   );
 }

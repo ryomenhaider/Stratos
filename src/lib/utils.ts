@@ -29,7 +29,7 @@ export function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function isOverdue(status: string, dueDate: string | null): boolean {
-  if (!dueDate || status === "completed" || status === "cancelled") return false;
+  if (!dueDate || status === "completed" || status === "cancelled" || status === "pending_approval") return false;
   return new Date(dueDate) < new Date();
 }
 

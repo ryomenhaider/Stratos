@@ -12,6 +12,7 @@ export interface TaskStats {
   cancelled: number;
   inProgress: number;
   todo: number;
+  pendingApproval: number;
   overdue: number;
   completionRate: number;
 }
@@ -22,10 +23,11 @@ export function computeTaskStats(tasks: TaskWithRelations[]): TaskStats {
   const cancelled = tasks.filter((t) => t.status === "cancelled").length;
   const inProgress = tasks.filter((t) => t.status === "in_progress").length;
   const todo = tasks.filter((t) => t.status === "todo").length;
+  const pendingApproval = tasks.filter((t) => t.status === "pending_approval").length;
   const pending = inProgress + todo;
   const overdue = tasks.filter((t) => isTaskOverdue(t)).length;
   const completionRate = total === 0 ? 0 : Math.round((completed / total) * 100);
-  return { total, completed, pending, cancelled, inProgress, todo, overdue, completionRate };
+  return { total, completed, pending, cancelled, inProgress, todo, pendingApproval, overdue, completionRate };
 }
 
 export interface EmployeeAnalyticsRow {
@@ -194,12 +196,14 @@ export function buildStatusDistribution(tasks: TaskWithRelations[]): StatusDistr
   const counts = {
     todo: tasks.filter((t) => t.status === "todo").length,
     in_progress: tasks.filter((t) => t.status === "in_progress").length,
+    pending_approval: tasks.filter((t) => t.status === "pending_approval").length,
     completed: tasks.filter((t) => t.status === "completed").length,
     cancelled: tasks.filter((t) => t.status === "cancelled").length,
   };
   return [
     { name: "To Do", value: counts.todo },
     { name: "In Progress", value: counts.in_progress },
+    { name: "Pending Approval", value: counts.pending_approval },
     { name: "Completed", value: counts.completed },
     { name: "Cancelled", value: counts.cancelled },
   ];

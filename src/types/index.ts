@@ -1,4 +1,4 @@
-export type TaskStatus = "todo" | "in_progress" | "completed" | "cancelled";
+export type TaskStatus = "todo" | "in_progress" | "pending_approval" | "completed" | "cancelled";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 export interface Employee {
@@ -50,6 +50,7 @@ export interface TaskWithRelations extends Task {
       "id" | "name" | "email" | "department" | "role" | "github_username" | "active"
     > | null;
   }[];
+  proof: TaskProof | null;
   completed_by_employee: Pick<
     Employee,
     "id" | "name" | "email" | "department" | "role" | "github_username" | "active"
@@ -58,6 +59,21 @@ export interface TaskWithRelations extends Task {
     Employee,
     "id" | "name" | "email" | "department" | "role" | "github_username" | "active"
   > | null;
+}
+
+export interface TaskProof {
+  id: string;
+  task_id: string;
+  employee_id: string | null;
+  pr_url: string | null;
+  note: string | null;
+  reviewed: boolean;
+  review_decision: "approved" | "rejected" | null;
+  rejection_reason: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  employee?: Pick<Employee, "id" | "name" | "email"> | null;
 }
 
 export interface TaskHistory {

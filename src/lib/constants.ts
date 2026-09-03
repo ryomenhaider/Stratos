@@ -3,6 +3,7 @@ import type { TaskPriority, TaskStatus } from "@/types";
 export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [
   { value: "todo", label: "To Do" },
   { value: "in_progress", label: "In Progress" },
+  { value: "pending_approval", label: "Pending Approval" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
 ];
@@ -24,6 +25,7 @@ export const AUTOMATION_TYPES = [
 export const STATUS_STYLES: Record<TaskStatus, string> = {
   todo: "bg-gray-100 text-gray-700",
   in_progress: "bg-blue-100 text-blue-700",
+  pending_approval: "bg-amber-100 text-amber-700",
   completed: "bg-green-100 text-green-700",
   cancelled: "bg-red-100 text-red-600",
 };

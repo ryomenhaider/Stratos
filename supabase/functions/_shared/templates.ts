@@ -104,6 +104,29 @@ export function overdueEmail(firstName: string, tasks: { title: string; completi
   );
 }
 
+export function rejectionEmail(
+  firstName: string,
+  taskTitle: string,
+  reason: string,
+  completionHref: string
+): string {
+  return baseEmail(
+    `<h2 style="margin:0 0 8px;font-size:18px;color:#111827;">Your submission needs revision</h2>
+    <p style="margin:0 0 12px;color:#4b5563;">Hi ${escapeHtml(firstName)},</p>
+    <p style="margin:0 0 12px;color:#4b5563;">Your submission for the task below was reviewed and not approved. Please address the feedback and resubmit.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+      <tr><td style="padding:16px 20px;font-size:15px;font-weight:bold;color:#111827;">${escapeHtml(taskTitle)}</td></tr>
+      <tr><td style="padding:0 20px 16px;color:#4b5563;font-size:14px;line-height:1.6;">
+        <span style="font-weight:bold;color:#dc2626;">Reason:</span> ${reason ? escapeHtml(reason) : "Please fix and resubmit."}
+      </td></tr>
+      <tr><td style="padding:0 20px 20px;">
+        <a href="${completionHref}" style="display:inline-block;background-color:#4f46e5;color:#ffffff;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:bold;text-decoration:none;">RESUBMIT PROOF</a>
+      </td></tr>
+    </table>
+    <p style="color:#6b7280;">If you have questions, reach out to your admin.</p>`
+  );
+}
+
 export function weeklySummaryEmail(firstName: string, assigned: number, completed: number, pending: number, overdue: number): string {
   return baseEmail(
     `<h2 style="margin:0 0 8px;font-size:18px;">Your weekly summary</h2>

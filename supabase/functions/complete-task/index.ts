@@ -8,10 +8,14 @@ Deno.serve(async (req) => {
     return corsJson({ ok: false, message: "Method not allowed" }, 405);
   }
 
-  const { token } = await bodyOf(req);
+  const { token, prUrl, note } = await bodyOf(req);
   if (typeof token !== "string" || !token) {
     return corsJson({ ok: false, message: "Missing token." }, 400);
   }
+
+  const hasProof =
+    (typeof prUrl === "string" && prUrl.trim().length > 0) ||
+    (typeof note === "string" && note.trim().length > 0);
 
   const supabase = serviceClient();
   const tokenHash = await sha256(token);
@@ -51,50 +55,76 @@ Deno.serve(async (req) => {
     return corsJson({ ok: false, message: "This task no longer exists." }, 404);
   }
 
+  // Lookup-only call (no proof): validate the token and return task info so the
+  // frontend can render a submission form. The token is NOT consumed here.
+  if (!hasProof) {
+    return corsJson({
+      ok: true,
+      lookup: true,
+      task: { id: task.id, title: task.title, status: task.status },
+    });
+  }
+
+  // Proof provided: submit for admin approval instead of completing directly.
   if (task.status === "completed") {
     await supabase
       .from("email_action_tokens")
       .update({ used_at: nowIso().toISOString() })
       .eq("id", entry.id);
-    return corsJson({ ok: true, message: "Task already completed." });
+    return corsJson({ ok: true, message: "Task is already completed." });
+  }
+
+  if (task.status === "cancelled") {
+    return corsJson({ ok: false, message: "This task has been cancelled." }, 400);
   }
 
   const now = nowIso();
-  const { data: updatedRows, error: updateError } = await supabase
+  const prUrlValue =
+    typeof prUrl === "string" && prUrl.trim().length > 0 ? prUrl.trim() : null;
+  const noteValue =
+    typeof note === "string" && note.trim().length > 0 ? note.trim() : null;
+
+  const { error: proofError } = await supabase.from("task_proofs").insert({
+    task_id: entry.task_id,
+    employee_id: entry.employee_id,
+    pr_url: prUrlValue,
+    note: noteValue,
+  });
+
+  if (proofError) {
+    return corsJson({ ok: false, message: "Could not save your submission." }, 500);
+  }
+
+  const { error: updateError } = await supabase
     .from("tasks")
     .update({
-      status: "completed",
-      completed_at: now.toISOString(),
-      completed_by: entry.employee_id,
+      status: "pending_approval",
       updated_at: now.toISOString(),
     })
     .eq("id", entry.task_id)
-    .neq("status", "completed")
-    .select("id");
+    .in("status", ["todo", "in_progress", "pending_approval"]);
 
   if (updateError) {
-    return corsJson({ ok: false, message: "Could not complete the task." }, 500);
-  }
-  if (!updatedRows || updatedRows.length === 0) {
-    await supabase
-      .from("email_action_tokens")
-      .update({ used_at: now.toISOString() })
-      .eq("id", entry.id);
-    return corsJson({ ok: true, message: "Task already completed." });
+    return corsJson({ ok: false, message: "Could not submit for approval." }, 500);
   }
 
-  await supabase.from("task_history").insert({
-    task_id: entry.task_id,
-    employee_id: entry.employee_id,
-    action: "completed",
-    old_status: task.status,
-    new_status: "completed",
-  });
+  if (task.status !== "pending_approval") {
+    await supabase.from("task_history").insert({
+      task_id: entry.task_id,
+      employee_id: entry.employee_id,
+      action: "submitted_for_approval",
+      old_status: task.status,
+      new_status: "pending_approval",
+    });
+  }
 
   await supabase
     .from("email_action_tokens")
     .update({ used_at: now.toISOString() })
     .eq("id", entry.id);
 
-  return corsJson({ ok: true, message: "Task completed successfully." });
+  return corsJson({
+    ok: true,
+    message: "Proof submitted. Awaiting admin approval.",
+  });
 });
