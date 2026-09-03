@@ -18,12 +18,12 @@ import {
   weeklySummaryEmail,
 } from "../_shared/templates.ts";
 
-const AUTOMATION_TYPES = [
+const AUTOMATION_TYPES = new Set([
   "daily_tasks",
   "overdue_reminder",
   "weekly_employee_summary",
   "weekly_admin_report",
-];
+]);
 
 type RunResult = {
   emailsSent: number;
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     return corsJson({ ok: false, message: "Method not allowed" }, 405);
   }
   const { type } = await bodyOf(req);
-  if (typeof type !== "string" || !AUTOMATION_TYPES.includes(type)) {
+  if (typeof type !== "string" || !AUTOMATION_TYPES.has(type)) {
     return corsJson({ ok: false, message: "Unknown automation type." }, 400);
   }
 
@@ -188,58 +188,66 @@ async function runDailyTasks(
   let emailsSent = 0;
   let emailsFailed = 0;
 
-  for (const employee of employees) {
-    const dedupeKey = `daily_tasks:${employee.id}:${today}`;
-    const { data: existing } = await supabase
-      .from("email_logs")
-      .select("id")
-      .eq("dedupe_key", dedupeKey)
-      .limit(1);
-    if (existing && existing.length > 0) continue;
+  const results = await Promise.all(
+    employees.map(async (employee) => {
+      const dedupeKey = `daily_tasks:${employee.id}:${today}`;
+      const { data: existing } = await supabase
+        .from("email_logs")
+        .select("id")
+        .eq("dedupe_key", dedupeKey)
+        .limit(1);
+      if (existing && existing.length > 0) return null;
 
-    const employeeTasks = tasks.filter((t) =>
-      assignees.some((a) => a.task_id === t.id && a.employee_id === employee.id)
-    );
-    if (employeeTasks.length === 0) continue;
+      const employeeTasks = tasks.filter((t) =>
+        assignees.some((a) => a.task_id === t.id && a.employee_id === employee.id)
+      );
+      if (employeeTasks.length === 0) return null;
 
-    const lines = [];
-    for (const task of employeeTasks) {
-      const token = randomToken();
-      const hash = await sha256(token);
-      const deadline = new Date(dedicated.getTime() + 14 * 24 * 60 * 60 * 1000);
-      await supabase.from("email_action_tokens").insert({
-        task_id: task.id,
+      const lines = await Promise.all(
+        employeeTasks.map(async (task) => {
+          const token = randomToken();
+          const hash = await sha256(token);
+          const deadline = new Date(dedicated.getTime() + 14 * 24 * 60 * 60 * 1000);
+          await supabase.from("email_action_tokens").insert({
+            task_id: task.id,
+            employee_id: employee.id,
+            token_hash: hash,
+            action: "complete_task",
+            expires_at: deadline.toISOString(),
+          });
+          return {
+            title: task.title,
+            priority: task.priority,
+            dueDate: new Date(task.due_date).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+            }),
+            completionHref: completionHref(token),
+          };
+        })
+      );
+
+      const firstName = employee.name.split(" ")[0];
+      const html = dailyTaskEmail(firstName, lines);
+      const res = await sendEmail(employee.email, "Your tasks for today", html, fromEmail ?? undefined);
+
+      await supabase.from("email_logs").insert({
         employee_id: employee.id,
-        token_hash: hash,
-        action: "complete_task",
-        expires_at: deadline.toISOString(),
+        automation_id: null,
+        email_type: "daily_tasks",
+        status: res.ok ? "sent" : "failed",
+        provider_message_id: res.messageId ?? null,
+        error: res.error ?? null,
+        dedupe_key: res.ok ? dedupeKey : null,
       });
-      lines.push({
-        title: task.title,
-        priority: task.priority,
-        dueDate: new Date(task.due_date).toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-        }),
-        completionHref: completionHref(token),
-      });
-    }
+      return res.ok ? { sent: 1, failed: 0 } : { sent: 0, failed: 1 };
+    })
+  );
 
-    const firstName = employee.name.split(" ")[0];
-    const html = dailyTaskEmail(firstName, lines);
-    const res = await sendEmail(employee.email, "Your tasks for today", html, fromEmail ?? undefined);
-
-    await supabase.from("email_logs").insert({
-      employee_id: employee.id,
-      automation_id: null,
-      email_type: "daily_tasks",
-      status: res.ok ? "sent" : "failed",
-      provider_message_id: res.messageId ?? null,
-      error: res.error ?? null,
-      dedupe_key: res.ok ? dedupeKey : null,
-    });
-    if (res.ok) emailsSent += 1;
-    else emailsFailed += 1;
+  for (const r of results) {
+    if (!r) continue;
+    emailsSent += r.sent;
+    emailsFailed += r.failed;
   }
 
   return { emailsSent, emailsFailed };
@@ -284,57 +292,65 @@ async function runOverdueReminder(
   let emailsSent = 0;
   let emailsFailed = 0;
 
-  for (const employee of employees) {
-    const employeeTasks = tasks.filter((t) =>
-      assignees.some((a) => a.task_id === t.id && a.employee_id === employee.id)
-    );
-    if (employeeTasks.length === 0) continue;
+  const results = await Promise.all(
+    employees.map(async (employee) => {
+      const employeeTasks = tasks.filter((t) =>
+        assignees.some((a) => a.task_id === t.id && a.employee_id === employee.id)
+      );
+      if (employeeTasks.length === 0) return null;
 
-    const dedupeKey = `overdue_reminder:${employee.id}:${today}`;
-    const { data: existing } = await supabase
-      .from("email_logs")
-      .select("id")
-      .eq("dedupe_key", dedupeKey)
-      .limit(1);
-    if (existing && existing.length > 0) continue;
+      const dedupeKey = `overdue_reminder:${employee.id}:${today}`;
+      const { data: existing } = await supabase
+        .from("email_logs")
+        .select("id")
+        .eq("dedupe_key", dedupeKey)
+        .limit(1);
+      if (existing && existing.length > 0) return null;
 
-    const lines = [];
-    for (const task of employeeTasks) {
-      const token = randomToken();
-      const hash = await sha256(token);
-      const deadline = new Date(nowIso().getTime() + 14 * 24 * 60 * 60 * 1000);
-      await supabase.from("email_action_tokens").insert({
-        task_id: task.id,
+      const lines = await Promise.all(
+        employeeTasks.map(async (task) => {
+          const token = randomToken();
+          const hash = await sha256(token);
+          const deadline = new Date(nowIso().getTime() + 14 * 24 * 60 * 60 * 1000);
+          await supabase.from("email_action_tokens").insert({
+            task_id: task.id,
+            employee_id: employee.id,
+            token_hash: hash,
+            action: "complete_task",
+            expires_at: deadline.toISOString(),
+          });
+          return {
+            title: task.title,
+            dueDate: new Date(task.due_date).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+            }),
+            completionHref: completionHref(token),
+          };
+        })
+      );
+
+      const firstName = employee.name.split(" ")[0];
+      const html = overdueEmail(firstName, lines);
+      const res = await sendEmail(employee.email, "You have overdue tasks", html, fromEmail ?? undefined);
+
+      await supabase.from("email_logs").insert({
         employee_id: employee.id,
-        token_hash: hash,
-        action: "complete_task",
-        expires_at: deadline.toISOString(),
+        automation_id: null,
+        email_type: "overdue_reminder",
+        status: res.ok ? "sent" : "failed",
+        provider_message_id: res.messageId ?? null,
+        error: res.error ?? null,
+        dedupe_key: res.ok ? dedupeKey : null,
       });
-      lines.push({
-        title: task.title,
-        dueDate: new Date(task.due_date).toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-        }),
-        completionHref: completionHref(token),
-      });
-    }
+      return res.ok ? { sent: 1, failed: 0 } : { sent: 0, failed: 1 };
+    })
+  );
 
-    const firstName = employee.name.split(" ")[0];
-    const html = overdueEmail(firstName, lines);
-    const res = await sendEmail(employee.email, "You have overdue tasks", html, fromEmail ?? undefined);
-
-    await supabase.from("email_logs").insert({
-      employee_id: employee.id,
-      automation_id: null,
-      email_type: "overdue_reminder",
-      status: res.ok ? "sent" : "failed",
-      provider_message_id: res.messageId ?? null,
-      error: res.error ?? null,
-      dedupe_key: res.ok ? dedupeKey : null,
-    });
-    if (res.ok) emailsSent += 1;
-    else emailsFailed += 1;
+  for (const r of results) {
+    if (!r) continue;
+    emailsSent += r.sent;
+    emailsFailed += r.failed;
   }
 
   return { emailsSent, emailsFailed };
@@ -369,48 +385,55 @@ async function runWeeklyEmployeeSummary(
   let emailsSent = 0;
   let emailsFailed = 0;
 
-  for (const employee of employees) {
-    const assigned = (assignments ?? []).filter((a) => a.employee_id === employee.id);
-    const completed = (completedTasks ?? []).filter(
-      (t) => t.completed_by === employee.id
-    ).length;
-    const overdue = assigned.filter(
-      (a) =>
-        a.task?.due_date &&
-        a.task.due_date < today &&
-        a.task.status !== "completed" &&
-        a.task.status !== "cancelled"
-    ).length;
-    const pending = assigned.length - completed;
+  const results = await Promise.all(
+    employees.map(async (employee) => {
+      const assigned = (assignments ?? []).filter((a) => a.employee_id === employee.id);
+      const completed = (completedTasks ?? []).filter(
+        (t) => t.completed_by === employee.id
+      ).length;
+      const overdue = assigned.filter(
+        (a) =>
+          a.task?.due_date &&
+          a.task.due_date < today &&
+          a.task.status !== "completed" &&
+          a.task.status !== "cancelled"
+      ).length;
+      const pending = assigned.length - completed;
 
-    const dedupeKey = `weekly_summary:${employee.id}:${weekStartIso.slice(0, 10)}`;
-    const { data: existing } = await supabase
-      .from("email_logs")
-      .select("id")
-      .eq("dedupe_key", dedupeKey)
-      .limit(1);
-    if (existing && existing.length > 0) continue;
+      const dedupeKey = `weekly_summary:${employee.id}:${weekStartIso.slice(0, 10)}`;
+      const { data: existing } = await supabase
+        .from("email_logs")
+        .select("id")
+        .eq("dedupe_key", dedupeKey)
+        .limit(1);
+      if (existing && existing.length > 0) return null;
 
-    const firstName = employee.name.split(" ")[0];
-    const html = weeklySummaryEmail(firstName, assigned.length, completed, pending, overdue);
-    const res = await sendEmail(
-      employee.email,
-      "Your weekly summary",
-      html,
-      fromEmail ?? undefined
-    );
+      const firstName = employee.name.split(" ")[0];
+      const html = weeklySummaryEmail(firstName, assigned.length, completed, pending, overdue);
+      const res = await sendEmail(
+        employee.email,
+        "Your weekly summary",
+        html,
+        fromEmail ?? undefined
+      );
 
-    await supabase.from("email_logs").insert({
-      employee_id: employee.id,
-      automation_id: null,
-      email_type: "weekly_employee_summary",
-      status: res.ok ? "sent" : "failed",
-      provider_message_id: res.messageId ?? null,
-      error: res.error ?? null,
-      dedupe_key: res.ok ? dedupeKey : null,
-    });
-    if (res.ok) emailsSent += 1;
-    else emailsFailed += 1;
+      await supabase.from("email_logs").insert({
+        employee_id: employee.id,
+        automation_id: null,
+        email_type: "weekly_employee_summary",
+        status: res.ok ? "sent" : "failed",
+        provider_message_id: res.messageId ?? null,
+        error: res.error ?? null,
+        dedupe_key: res.ok ? dedupeKey : null,
+      });
+      return res.ok ? { sent: 1, failed: 0 } : { sent: 0, failed: 1 };
+    })
+  );
+
+  for (const r of results) {
+    if (!r) continue;
+    emailsSent += r.sent;
+    emailsFailed += r.failed;
   }
 
   return { emailsSent, emailsFailed };

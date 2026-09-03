@@ -39,6 +39,7 @@ export default function Tasks() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const employees = employeesState.data ?? [];
@@ -83,6 +84,7 @@ export default function Tasks() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setFeedback(null);
     if (!form.title.trim()) {
       setError("Task title is required.");
       setSaving(false);
@@ -266,6 +268,9 @@ export default function Tasks() {
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+      )}
+      {feedback && (
+        <div className="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{feedback}</div>
       )}
 
       {tasksState.loading ? (
