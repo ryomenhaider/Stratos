@@ -1,16 +1,19 @@
-import { bodyOf, GITHUB_TOKEN, json, serviceClient } from "../_shared/helpers.ts";
+import { bodyOf, corsHeaders, corsJson, GITHUB_TOKEN, serviceClient } from "../_shared/helpers.ts";
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   if (req.method !== "POST") {
-    return json({ ok: false, message: "Method not allowed" }, 405);
+    return corsJson({ ok: false, message: "Method not allowed" }, 405);
   }
 
   const { title, body } = await bodyOf(req);
   if (typeof title !== "string" || !title.trim()) {
-    return json({ ok: false, message: "Title is required." }, 400);
+    return corsJson({ ok: false, message: "Title is required." }, 400);
   }
   if (!GITHUB_TOKEN) {
-    return json({ ok: false, message: "GitHub token is not configured." }, 500);
+    return corsJson({ ok: false, message: "GitHub token is not configured." }, 500);
   }
 
   const supabase = serviceClient();
@@ -21,11 +24,11 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (settingsError) {
-    return json({ ok: false, message: "Internal error." }, 500);
+    return corsJson({ ok: false, message: "Internal error." }, 500);
   }
   const repo = settings?.github_repo;
   if (!repo || !repo.includes("/")) {
-    return json(
+    return corsJson(
       { ok: false, message: "No GitHub repository configured. Add it on the GitHub page or Settings." },
       400
     );
@@ -46,8 +49,8 @@ Deno.serve(async (req) => {
 
   const data = await res.json();
   if (!res.ok) {
-    return json({ ok: false, message: data?.message ?? "GitHub API error" }, 502);
+    return corsJson({ ok: false, message: data?.message ?? "GitHub API error" }, 502);
   }
 
-  return json({ ok: true, issue_id: data.number, issue_url: data.html_url });
+  return corsJson({ ok: true, issue_id: data.number, issue_url: data.html_url });
 });

@@ -1,13 +1,16 @@
-import { bodyOf, json, serviceClient, sha256, nowIso } from "../_shared/helpers.ts";
+import { bodyOf, corsHeaders, corsJson, serviceClient, sha256, nowIso } from "../_shared/helpers.ts";
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   if (req.method !== "POST") {
-    return json({ ok: false, message: "Method not allowed" }, 405);
+    return corsJson({ ok: false, message: "Method not allowed" }, 405);
   }
 
   const { token } = await bodyOf(req);
   if (typeof token !== "string" || !token) {
-    return json({ ok: false, message: "Missing token." }, 400);
+    return corsJson({ ok: false, message: "Missing token." }, 400);
   }
 
   const supabase = serviceClient();
@@ -20,19 +23,19 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (lookupError) {
-    return json({ ok: false, message: "Internal error." }, 500);
+    return corsJson({ ok: false, message: "Internal error." }, 500);
   }
   if (!entry) {
-    return json({ ok: false, message: "This link is invalid." }, 404);
+    return corsJson({ ok: false, message: "This link is invalid." }, 404);
   }
   if (entry.used_at) {
-    return json({ ok: false, message: "This link has already been used." }, 400);
+    return corsJson({ ok: false, message: "This link has already been used." }, 400);
   }
   if (entry.action !== "complete_task") {
-    return json({ ok: false, message: "This link is not a completion link." }, 400);
+    return corsJson({ ok: false, message: "This link is not a completion link." }, 400);
   }
   if (new Date(entry.expires_at).getTime() < nowIso().getTime()) {
-    return json({ ok: false, message: "This link has expired." }, 400);
+    return corsJson({ ok: false, message: "This link has expired." }, 400);
   }
 
   const { data: task, error: taskError } = await supabase
@@ -42,10 +45,10 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (taskError) {
-    return json({ ok: false, message: "Internal error." }, 500);
+    return corsJson({ ok: false, message: "Internal error." }, 500);
   }
   if (!task) {
-    return json({ ok: false, message: "This task no longer exists." }, 404);
+    return corsJson({ ok: false, message: "This task no longer exists." }, 404);
   }
 
   if (task.status === "completed") {
@@ -53,7 +56,7 @@ Deno.serve(async (req) => {
       .from("email_action_tokens")
       .update({ used_at: nowIso().toISOString() })
       .eq("id", entry.id);
-    return json({ ok: true, message: "Task already completed." });
+    return corsJson({ ok: true, message: "Task already completed." });
   }
 
   const now = nowIso();
@@ -70,14 +73,14 @@ Deno.serve(async (req) => {
     .select("id");
 
   if (updateError) {
-    return json({ ok: false, message: "Could not complete the task." }, 500);
+    return corsJson({ ok: false, message: "Could not complete the task." }, 500);
   }
   if (!updatedRows || updatedRows.length === 0) {
     await supabase
       .from("email_action_tokens")
       .update({ used_at: now.toISOString() })
       .eq("id", entry.id);
-    return json({ ok: true, message: "Task already completed." });
+    return corsJson({ ok: true, message: "Task already completed." });
   }
 
   await supabase.from("task_history").insert({
@@ -93,5 +96,5 @@ Deno.serve(async (req) => {
     .update({ used_at: now.toISOString() })
     .eq("id", entry.id);
 
-  return json({ ok: true, message: "Task completed successfully." });
+  return corsJson({ ok: true, message: "Task completed successfully." });
 });

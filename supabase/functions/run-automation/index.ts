@@ -1,8 +1,9 @@
 import {
   bodyOf,
   completionHref,
+  corsHeaders,
+  corsJson,
   dateKeyInTz,
-  json,
   nowIso,
   randomToken,
   sendEmail,
@@ -31,16 +32,19 @@ type RunResult = {
 };
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   if (req.method !== "POST") {
-    return json({ ok: false, message: "Method not allowed" }, 405);
+    return corsJson({ ok: false, message: "Method not allowed" }, 405);
   }
   const { type } = await bodyOf(req);
   if (typeof type !== "string" || !AUTOMATION_TYPES.includes(type)) {
-    return json({ ok: false, message: "Unknown automation type." }, 400);
+    return corsJson({ ok: false, message: "Unknown automation type." }, 400);
   }
 
   if (!APP_URL) {
-    return json(
+    return corsJson(
       { ok: false, message: "APP_URL is not configured. Completion links cannot be built." },
       500
     );
@@ -75,7 +79,7 @@ Deno.serve(async (req) => {
     .single();
 
   if (runError) {
-    return json({ ok: false, message: "Could not start run: " + runError.message }, 500);
+    return corsJson({ ok: false, message: "Could not start run: " + runError.message }, 500);
   }
 
   let result: RunResult;
@@ -120,9 +124,9 @@ Deno.serve(async (req) => {
     .eq("id", run.id);
 
   if (result.error) {
-    return json({ ok: false, message: result.error, emails_sent: result.emailsSent, emails_failed: result.emailsFailed }, 500);
+    return corsJson({ ok: false, message: result.error, emails_sent: result.emailsSent, emails_failed: result.emailsFailed }, 500);
   }
-  return json({
+  return corsJson({
     ok: true,
     status: "success",
     emails_sent: result.emailsSent,
